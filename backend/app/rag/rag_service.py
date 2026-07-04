@@ -78,6 +78,16 @@ class RagService:
             return documents
         except Exception as e:
             logger.error(f"【HyDE】检索文档失败: {e}")
+            # 降级到直接使用BM25检索器进行检索
+            logger.info(f"【HyDE】降级到使用BM25检索器")
+            try:
+                bm25_retriever = await self.vector_store.get_bm25_retriever()
+                if bm25_retriever:
+                    documents = await bm25_retriever.ainvoke(query)
+                    logger.info(f"【HyDE】BM25检索到 {len(documents)} 个相关文档")
+                    return documents
+            except Exception as bm25_error:
+                logger.error(f"【HyDE】BM25检索也失败: {bm25_error}")
             return []
 
     @traceable
