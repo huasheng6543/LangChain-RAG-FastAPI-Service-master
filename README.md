@@ -22,6 +22,7 @@
 ## 核心特性
 
 - **智能问答** 💬：基于 RAG 技术，结合文档检索和大语言模型，提供精准的问答体验
+- **文档上传** 📄：支持上传 PDF、TXT、MD、DOCX、PPTX 格式文档到知识库
 - **会话持久化** 💾：使用 MySQL 存储会话历史，支持长期保存和回溯
 - **多语言支持** 🌐：前端集成 i18n，支持中英文界面切换
 - **微服务架构** 🏗️：完整的用户认证、限流熔断、全局日志
@@ -334,9 +335,10 @@ python download_models.py
 | `/api/auth/me` | GET | 获取当前用户 |
 | `/api/chat/stream` | POST | 流式聊天 |
 | `/api/chat/query` | POST | 非流式聊天 |
-| `/api/vector/add` | POST | 添加文档向量 |
+| `/api/vector/add/single` | POST | 上传单个文件 |
+| `/api/vector/add/multiple` | POST | 上传多个文件 |
 | `/api/vector/search` | POST | 向量检索 |
-| `/api/vector/clean` | DELETE | 清空向量库 |
+| `/api/vector/clean` | DELETE | 清空用户所有文档 |
 
 ## 配置说明
 

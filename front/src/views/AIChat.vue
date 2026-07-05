@@ -26,6 +26,25 @@
       </div>
       
       <div class="input-container">
+        <div class="input-tools">
+          <van-button 
+            icon="upload" 
+            size="small" 
+            type="default"
+            class="upload-btn"
+            @click="triggerFileInput"
+          >
+            上传
+          </van-button>
+          <input 
+            ref="fileInput"
+            type="file"
+            multiple
+            accept=".txt,.pdf,.md,.docx,.pptx"
+            class="file-input"
+            @change="handleFileChange"
+          />
+        </div>
         <van-field
           v-model="userInput"
           rows="1"
@@ -88,6 +107,7 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const sessionStore = useSessionStore();
+const fileInput = ref(null);
 
 // 配置marked使用marked-highlight插件
 marked.use(markedHighlight({
@@ -271,6 +291,70 @@ const scrollToBottom = () => {
   }
 };
 
+// 文件上传相关函数
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+const handleFileChange = async (event) => {
+  const files = Array.from(event.target.files);
+  if (files.length === 0) return;
+  
+  if (!userStore.getLoginStatus) {
+    showToast('请先登录');
+    return;
+  }
+  
+  const token = localStorage.getItem('jwt_token') || userStore.token;
+  const loadingToast = showToast({
+    message: '上传中...',
+    forbidClick: true,
+    loadingType: 'spinner'
+  });
+  
+  try {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    const response = await fetch('/api/vector/add/multiple', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.code === 200) {
+      showToast({
+        type: 'success',
+        message: result.message || `成功上传 ${files.length} 个文件`
+      });
+      messages.value.push({ 
+        role: 'assistant', 
+        content: `已成功上传 ${files.length} 个文件到知识库，您可以基于这些文档提问了。` 
+      });
+    } else {
+      showToast({
+        type: 'fail',
+        message: result.message || '上传失败'
+      });
+    }
+  } catch (error) {
+    console.error('上传失败:', error);
+    showToast({
+      type: 'fail',
+      message: '上传失败，请稍后重试'
+    });
+  } finally {
+    loadingToast.clear();
+    event.target.value = '';
+  }
+};
+
 // 监听消息变化，自动滚动
 watch(messages, () => {
   nextTick(() => {
@@ -391,9 +475,23 @@ const loadSessionHistory = (session) => {
 
 .input-container {
   display: flex;
+  flex-direction: column;
   padding: 10px;
   border-top: 1px solid #eee;
   background-color: #fff;
+}
+
+.input-tools {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.upload-btn {
+  margin-right: 10px;
+}
+
+.file-input {
+  display: none;
 }
 
 .chat-input {

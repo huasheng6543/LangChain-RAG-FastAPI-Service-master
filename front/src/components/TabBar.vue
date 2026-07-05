@@ -13,7 +13,6 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const active = ref(0)
 
-// 根据当前路由路径设置激活的标签
 const setActiveTab = () => {
   const path = route.path
   if (path.includes('/aichat')) {

@@ -5,6 +5,7 @@ import uuid
 import os
 import mimetypes
 
+import magic
 from fastapi import HTTPException, UploadFile
 
 from app.core.logger_handler import logger
