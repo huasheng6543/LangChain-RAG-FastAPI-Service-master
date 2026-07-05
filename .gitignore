@@ -94,3 +94,12 @@ ehthumbs_vista.db
 # Docker
 Dockerfile
 .dockerignore
+
+# Models - too large for git
+backend/models/
+
+# Python installer
+python-*.exe
+
+# Test scripts
+backend/test_*.py

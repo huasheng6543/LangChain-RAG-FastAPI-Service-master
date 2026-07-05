@@ -162,7 +162,7 @@ class ChatService:
             
             if result["success"]:
                 # log记录排序结果
-                logger.info(f"【重排序结果】查询: {query} 排序结果: {[f'文档 {doc['document']}: {doc['similarity']:.4f}' for doc in result['documents']]}")
+                logger.info(f"【重排序结果】查询: {query} 排序结果: {['文档 ' + doc['document'] + ': ' + str(doc['similarity'])[:6] for doc in result['documents']]}")
                 return result["documents"]
             else:
                 logger.warning(f"【重排序失败】{result['error']}")

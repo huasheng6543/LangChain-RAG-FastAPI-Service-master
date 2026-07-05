@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: ./backend
+    container_name: rag-fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=123456
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=chat_history
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - USE_MILVUS=false
+      - SECRET_KEY=MY_JWT_SECRET_KWY_FOR_USR_AND_I_JUST_WRITE_THIS
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      - mysql
+      - redis
+      - milvus
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+      - ./backend/data:/app/data
+    networks:
+      - rag-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=chat_history
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - rag-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-network
+
+  milvus:
+    image: milvusdb/milvus:v2.4.5
+    container_name: rag-milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      - MILVUS_MODE=standalone
+    volumes:
+      - milvus_data:/var/lib/milvus
+    networks:
+      - rag-network
+
+  celery:
+    build: ./backend
+    container_name: rag-celery
+    command: celery -A app.celery_config worker --loglevel=info
+    environment:
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=123456
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - fastapi
+      - redis
+      - mysql
+    volumes:
+      - ./backend:/app
+    networks:
+      - rag-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  milvus_data:
+
+networks:
+  rag-network:
+    driver: bridge

@@ -60,4 +60,4 @@ async def get_weather_tools(city: str = None) -> str:
 @tool(description="用于获取当前年月日时分的工具")
 async def what_time_is_now() -> str:
     """获取当前年月日时分的工具"""
-    return f"当前时间是：{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}"
+    return f'当前时间是：{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}'

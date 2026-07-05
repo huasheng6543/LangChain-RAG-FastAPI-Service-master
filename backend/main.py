@@ -14,7 +14,8 @@ from app.services.database_session_manager import init_database_session_manager
 
 from app.core.failed_response_register import register_exception_handlers
 from app.core.rate_limit import RateLimitMiddleware
-from app.core.logger_handler import logger
+from app.core.logger_handler import logger, RequestLogMiddleware
+from app.core.circuit_breaker import CircuitBreakerMiddleware
 
 from app.rag.reorder_service import check_and_download_reranker_model
 
@@ -23,8 +24,10 @@ load_dotenv()
 
 app = FastAPI()
 
-# 集成限流中间件
-app.add_middleware(RateLimitMiddleware, limit=100, window=60) # 每分钟100个请求
+# 集成中间件
+app.add_middleware(RateLimitMiddleware, limit=100, window=60)
+app.add_middleware(RequestLogMiddleware)
+app.add_middleware(CircuitBreakerMiddleware)
 
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):

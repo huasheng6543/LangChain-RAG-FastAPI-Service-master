@@ -29,7 +29,6 @@ export const useUserStore = defineStore('user', {
   actions: {
     async login(userData) {
       try {
-        // 发送登录请求
         const response = await axios.post(apiConfig.endpoints.login, {
           username: userData.username,
           password: userData.password
@@ -39,13 +38,9 @@ export const useUserStore = defineStore('user', {
           }
         });
         
-        // 检查响应状态
-        if (response.status === 200) {
-          // 登录成功
-          const userInfo = response.data.user;
-          // 存储token
-          const token = response.data.token;
-          // 将token存入到localStorage
+        if (response.status === 200 && response.data.code === 200) {
+          const userInfo = response.data.data;
+          const token = response.data.data.access_token;
           localStorage.setItem('jwt_token', token);
           
           this.userInfo = userInfo;
@@ -57,17 +52,16 @@ export const useUserStore = defineStore('user', {
             message: response.data.message
           };
         } else {
-          // 登录失败
           return {
             success: false,
-            message: response.data.detail || '登录失败'
+            message: response.data.message || response.data.detail || '登录失败'
           };
         }
       } catch (error) {
         console.error('登录请求失败:', error);
         return {
           success: false,
-          message: error.response?.data?.detail?.non_field_errors?.[0] || '登录请求失败，请稍后再试'
+          message: error.response?.data?.message || error.response?.data?.detail || '登录请求失败，请稍后再试'
         };
       }
     },
@@ -243,19 +237,15 @@ export const useUserStore = defineStore('user', {
       }
     },
     
-    // 用户注册
     async register(userData) {
       try {
         console.log('=== 开始注册请求 ===');
         console.log('请求数据:', userData);
         
-        // 发送注册请求到用户服务
         const response = await axios.post('/user/register/', {
           username: userData.username,
           email: userData.email,
-          telephone: userData.telephone || '',
-          password: userData.password,
-          confirm_password: userData.confirm_password
+          password: userData.password
         }, {
           headers: {
             'X-CSRFTOKEN': getCsrfToken(),
@@ -267,17 +257,12 @@ export const useUserStore = defineStore('user', {
         console.log('响应状态码:', response.status);
         console.log('响应数据:', response.data);
         
-        // 根据后端返回的数据格式判断注册是否成功
-        // 后端返回格式: { status: 201, message: "注册成功", user: {...}, token: "..." }
-        if (response.data.status === 201 && response.data.token) {
-          // 注册成功
-          const token = response.data.token;
-          const userInfo = response.data.user;
+        if (response.data.code === 200) {
+          const token = response.data.data.access_token;
+          const userInfo = response.data.data;
           
-          // 保存token到localStorage
           localStorage.setItem('jwt_token', token);
           
-          // 更新store状态
           this.userInfo = userInfo;
           this.token = token;
           this.isLogin = true;
@@ -288,7 +273,6 @@ export const useUserStore = defineStore('user', {
             message: response.data.message || '注册成功'
           };
         } else {
-          // 注册失败
           console.log('注册失败:', response.data.message || '未知错误');
           return {
             success: false,
@@ -299,7 +283,6 @@ export const useUserStore = defineStore('user', {
         console.error('=== 注册请求异常 ===');
         console.error('错误:', error);
         
-        // 处理错误响应
         let errorMessage = '注册失败，请稍后重试';
         if (error.response?.data?.message) {
           errorMessage = error.response.data.message;

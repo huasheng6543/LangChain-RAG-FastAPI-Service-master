@@ -35,16 +35,7 @@ async def init_db():
 # 依赖项
 async def get_db():
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-
-        except Exception:
-            await session.rollback()
-            raise
-
-        finally:
-            await session.close()
+        yield session
 
 
 

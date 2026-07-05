@@ -93,16 +93,17 @@ class RagService:
     @traceable
     async def reorder_documents(self, query: str, documents: list) -> list:
         """
-        对文档进行重排序
+        对文档进行重排序（两阶段检索：向量粗筛 + Cross-Encoder重排序）
         :param query: 查询语句
         :param documents: 文档列表
         :return: 重排序后的文档列表
         """
-        result = await reorder_service.reorder_documents(query, documents)
+        result = await reorder_service.reorder_documents(query, documents, top_k=5, score_threshold=0.0)
         if result["success"]:
-            # 提取重排序后的文档内容
             reordered_documents = [doc.get("document", "") for doc in result["documents"]]
-            logger.info(f"【RAG】文档重排序成功，返回 {len(reordered_documents)} 个文档")
+            metrics = result.get("metrics", {})
+            logger.info(f"【RAG】两阶段检索完成 - 向量检索: {len(documents)}条, 重排序后: {len(reordered_documents)}条, "
+                      f"平均分数: {metrics.get('avg_score', 0):.4f}, 重排序耗时: {metrics.get('reorder_time_ms', 0)}ms")
             return reordered_documents
         else:
             logger.warning(f"【RAG】重排序失败: {result['error']}")

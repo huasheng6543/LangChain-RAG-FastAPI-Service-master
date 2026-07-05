@@ -26,13 +26,13 @@ export default defineConfig({
         target: 'http://127.0.0.1:8002',
         changeOrigin: true
       },
-      // 用户相关接口代理到8000端口
+      // 用户相关接口代理到8002端口（FastAPI后端）
       '/user': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8002',
         changeOrigin: true
       },
       '/file': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8002',
         changeOrigin: true
       }
     }

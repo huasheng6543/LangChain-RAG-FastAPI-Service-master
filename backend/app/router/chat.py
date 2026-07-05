@@ -5,8 +5,9 @@ from fastapi.routing import APIRouter
 from fastapi import UploadFile, File, Depends
 from fastapi.responses import StreamingResponse
 
-from app.agent.agent import get_agent_stream_response
+from app.agent.agent import get_agent_stream_response, get_agent_response
 from app.router.chat_service import ChatService, get_router_service
+from app.services import session_manager as sm
 
 from app.schemas.models import QueryRequest, RAGResponse, RAGRequest, SessionResponse, ReorderResponse, ReorderRequest
 from app.utils.auth_utils import get_current_user_id
@@ -23,10 +24,8 @@ async def query_stream(
         _: None = Depends(rate_limit(limit=10, window=60))
 ):
     """查询Agent流式响应"""
-    # 如果没有提供session_id，自动生成一个
     session_id = request.session_id or str(uuid.uuid4())
     
-    # 直接调用get_agent_stream_response函数
     return StreamingResponse(
         get_agent_stream_response(request.query, session_id, user_id),
         media_type="text/event-stream",
@@ -35,6 +34,23 @@ async def query_stream(
             "Connection": "keep-alive"
         }
     )
+
+
+@chat_router.post("/agent/query")
+async def query_agent(
+        request: QueryRequest,
+        user_id: str = Depends(get_current_user_id),
+        _: None = Depends(rate_limit(limit=10, window=60))
+):
+    """查询Agent非流式响应"""
+    session_id = request.session_id or str(uuid.uuid4())
+    
+    history = await sm.session_manager.get_history(session_id, user_id)
+    response = await get_agent_response(request.query, history)
+    
+    await sm.session_manager.add_message(session_id, user_id, request.query, response["response"])
+    
+    return success_response(data={"response": response["response"], "session_id": session_id})
 
 
 @chat_router.post("/rag/query", response_model=RAGResponse)

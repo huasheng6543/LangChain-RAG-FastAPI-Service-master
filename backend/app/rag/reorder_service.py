@@ -73,48 +73,68 @@ class ReorderService:
         """获取模型实例（懒加载）"""
         return await self._get_model()
     
-    async def reorder_documents(self, query: str, documents: List[str]) -> Dict[str, Any]:
+    async def reorder_documents(self, query: str, documents: List[str], top_k: int = 3, score_threshold: float = -1.0) -> Dict[str, Any]:
         """
         对文档进行重排序
         :param query: 查询语句
         :param documents: 文档列表
+        :param top_k: 返回前k个最相关的文档
+        :param score_threshold: 分数阈值，低于此阈值的文档被过滤
         :return: 包含重排序结果的字典，格式为：
-                 {"success": bool, "documents": List[Dict], "error": str}
+                 {"success": bool, "documents": List[Dict], "error": str, "metrics": Dict}
         """
         try:
+            import time
+            start_time = time.time()
+            
             if not documents:
                 return {
                     "success": True,
                     "documents": [],
-                    "error": ""
+                    "error": "",
+                    "metrics": {"total_docs": 0, "filtered_docs": 0, "reorder_time_ms": 0}
                 }
             
-            # 构造查询+文档对
             pairs = [(query, doc) for doc in documents]
             
-            # 使用模型进行批量预测（batch_size=1避免padding令牌报错）
             model = await self.model
-            # 禁用梯度计算，提高推理性能
             with torch.no_grad():
-                scores = model.predict(pairs, batch_size=1)
+                scores = model.predict(pairs, batch_size=4)
             
-            # 构建结果列表
             scored_documents = []
             for doc, score in zip(documents, scores):
                 scored_documents.append({
                     "document": doc,
                     "similarity": float(score)
                 })
-                logger.info(f"【重排序服务】文档相似度分数: {score:.4f}")
             
-            # 按相似度分数降序排序
             sorted_docs = sorted(scored_documents, key=lambda x: x["similarity"], reverse=True)
-            logger.info(f"【重排序服务】文档重排序成功，返回 {len(sorted_docs)} 个文档")
+            
+            filtered_docs = [doc for doc in sorted_docs if doc["similarity"] >= score_threshold]
+            
+            final_docs = filtered_docs[:top_k]
+            
+            end_time = time.time()
+            reorder_time_ms = int((end_time - start_time) * 1000)
+            
+            avg_score = sum(doc["similarity"] for doc in final_docs) / len(final_docs) if final_docs else 0
+            max_score = max(doc["similarity"] for doc in final_docs) if final_docs else 0
+            
+            logger.info(f"【重排序服务】重排序完成 - 原始文档数: {len(documents)}, 过滤后: {len(filtered_docs)}, 返回: {len(final_docs)}, "
+                      f"平均分数: {avg_score:.4f}, 最高分数: {max_score:.4f}, 耗时: {reorder_time_ms}ms")
             
             return {
                 "success": True,
-                "documents": sorted_docs,
-                "error": ""
+                "documents": final_docs,
+                "error": "",
+                "metrics": {
+                    "total_docs": len(documents),
+                    "filtered_docs": len(filtered_docs),
+                    "returned_docs": len(final_docs),
+                    "avg_score": avg_score,
+                    "max_score": max_score,
+                    "reorder_time_ms": reorder_time_ms
+                }
             }
         except Exception as e:
             error_msg = str(e)
@@ -122,7 +142,8 @@ class ReorderService:
             return {
                 "success": False,
                 "documents": [],
-                "error": error_msg
+                "error": error_msg,
+                "metrics": {"total_docs": len(documents) if documents else 0, "filtered_docs": 0, "reorder_time_ms": 0}
             }
 
     @staticmethod

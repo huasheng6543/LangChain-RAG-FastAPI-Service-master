@@ -69,19 +69,38 @@ class ChineseBM25Retriever(BaseRetriever):
 
 class VectorStoreService:
     """向量数据库服务"""
-    def __init__(self):
-        persist_dir = get_abstract_path(chroma_config['persist_directory'])
-        self.vectors_store = Chroma(
-            collection_name=chroma_config['collection_name'],
-            embedding_function=embed_model,
-            persist_directory=persist_dir,
-        )
+    def __init__(self, use_milvus=None):
+        if use_milvus is None:
+            use_milvus = os.getenv("USE_MILVUS", "false").lower() == "true"
+        self.use_milvus = use_milvus
         self.spliter = AsyncTextSplitter(
             chunk_size=chroma_config['chunk_size'],
             chunk_overlap=chroma_config['chunk_overlap'],
             separators=chroma_config['separators'],
             embedding_model=embed_model
         )
+
+        if use_milvus:
+            try:
+                from app.rag.milvus_store import MilvusVectorStoreService
+                self.vectors_store = MilvusVectorStoreService()
+                logger.info("【向量数据库】已切换到Milvus")
+            except Exception as e:
+                logger.error(f"【向量数据库】初始化Milvus失败，降级到Chroma: {e}")
+                self.use_milvus = False
+                persist_dir = get_abstract_path(chroma_config['persist_directory'])
+                self.vectors_store = Chroma(
+                    collection_name=chroma_config['collection_name'],
+                    embedding_function=embed_model,
+                    persist_directory=persist_dir,
+                )
+        else:
+            persist_dir = get_abstract_path(chroma_config['persist_directory'])
+            self.vectors_store = Chroma(
+                collection_name=chroma_config['collection_name'],
+                embedding_function=embed_model,
+                persist_directory=persist_dir,
+            )
 
     async def get_bm25_retriever(self):
         """获取BM25检索器"""
