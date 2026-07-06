@@ -1,36 +1,6 @@
 version: '3.8'
 
 services:
-  fastapi:
-    build: ./backend
-    container_name: rag-fastapi
-    ports:
-      - "8000:8000"
-    environment:
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=123456
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=chat_history
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-      - USE_MILVUS=false
-      - SECRET_KEY=MY_JWT_SECRET_KWY_FOR_USR_AND_I_JUST_WRITE_THIS
-      - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-    depends_on:
-      - mysql
-      - redis
-      - milvus
-    volumes:
-      - ./backend:/app
-      - ./backend/logs:/app/logs
-      - ./backend/data:/app/data
-    networks:
-      - rag-network
-
   mysql:
     image: mysql:8.0
     container_name: rag-mysql
@@ -38,11 +8,25 @@ services:
       - "3306:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=123456
-      - MYSQL_DATABASE=chat_history
+      - MYSQL_DATABASE=chatbot
+      - MYSQL_CHARSET=utf8mb4
+      - MYSQL_COLLATION=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./backend/docker/mysql/init:/docker-entrypoint-initdb.d
     networks:
       - rag-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   redis:
     image: redis:7-alpine
@@ -53,6 +37,17 @@ services:
       - redis_data:/data
     networks:
       - rag-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   milvus:
     image: milvusdb/milvus:v2.4.5
@@ -66,32 +61,142 @@ services:
       - milvus_data:/var/lib/milvus
     networks:
       - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
-  celery:
-    build: ./backend
-    container_name: rag-celery
-    command: celery -A app.celery_config worker --loglevel=info
+  fastapi:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-fastapi
+    ports:
+      - "8000:8000"
     environment:
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=123456
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
+      - RUN_MODE=3
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=chatbot
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - USE_MILVUS=false
+      - CHAT_MODEL_TYPE=ollama
+      - OLLAMA_CHAT_MODEL=qwen3:4b
+      - DEEPSEEK_BASE_URL=http://host.docker.internal:11434
+      - RERANKER_MODEL_PATH=models/Qwen3-Reranker-0.6B
+      - SECRET_KEY=MY_JWT_SECRET_KWY_FOR_USR_AND_I_JUST_WRITE_THIS
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - PYTHONUNBUFFERED=1
     depends_on:
-      - fastapi
-      - redis
-      - mysql
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend:/app
+      - ./backend/logs:/app/logs
+      - ./backend/data:/app/data
+      - ./backend/models:/app/models
     networks:
       - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  celery:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-celery
+    command: celery -A app.celery_config worker --loglevel=info --concurrency=4 -n worker@%h
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      fastapi:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+    networks:
+      - rag-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+
+  celery-beat:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-celery-beat
+    command: celery -A app.celery_config beat --loglevel=info
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      fastapi:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./backend/logs:/app/logs
+    networks:
+      - rag-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   mysql_data:
+    driver: local
   redis_data:
+    driver: local
   milvus_data:
+    driver: local
 
 networks:
   rag-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

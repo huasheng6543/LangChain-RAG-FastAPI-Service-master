@@ -438,22 +438,128 @@ python test_retrieval_performance.py
 
 ## 部署指南
 
-### 使用 Docker
+### 使用 Docker Compose（推荐）
+
+项目提供完整的 Docker Compose 容器编排方案，一键启动 FastAPI、MySQL、Redis、Milvus、Celery 整套服务。
+
+#### 一键启动脚本
 
 ```bash
-# 启动全部服务
+# Windows
+docker-start.bat start
+
+# Linux/Mac
+chmod +x docker-start.sh
+./docker-start.sh start
+```
+
+#### 管理命令
+
+```bash
+# 启动服务
+docker-start.bat start          # Windows
+./docker-start.sh start          # Linux/Mac
+
+# 停止服务
+docker-start.bat stop           # Windows
+./docker-start.sh stop           # Linux/Mac
+
+# 重启服务
+docker-start.bat restart        # Windows
+./docker-start.sh restart        # Linux/Mac
+
+# 查看服务状态
+docker-start.bat status         # Windows
+./docker-start.sh status         # Linux/Mac
+
+# 查看日志
+docker-start.bat logs           # 查看所有日志
+docker-start.bat logs fastapi   # 查看FastAPI日志
+docker-start.bat logs celery    # 查看Celery日志
+
+# 构建镜像
+docker-start.bat build          # Windows
+./docker-start.sh build          # Linux/Mac
+
+# 清理所有容器和数据
+docker-start.bat clean          # Windows (需确认)
+./docker-start.sh clean          # Linux/Mac (需确认)
+```
+
+#### Docker Compose 服务清单
+
+| 服务 | 镜像 | 端口 | 说明 |
+|------|------|------|------|
+| **fastapi** | 自定义构建 | 8000 | 主应用服务 |
+| **mysql** | mysql:8.0 | 3306 | 会话数据库 |
+| **redis** | redis:7-alpine | 6379 | 缓存/限流/消息队列 |
+| **milvus** | milvusdb/milvus:v2.4.5 | 19530 | 向量数据库 |
+| **celery** | 自定义构建 | - | 异步任务处理 |
+| **celery-beat** | 自定义构建 | - | 定时任务调度 |
+
+#### 日志持久化方案
+
+- **容器日志**: 使用 json-file 驱动，自动轮转
+  - FastAPI/Celery: 单文件最大50MB，保留10个文件
+  - MySQL/Redis: 单文件最大10MB，保留5个文件
+  - Milvus: 单文件最大50MB，保留5个文件
+- **应用日志**: 挂载到 `backend/logs/` 目录
+- **数据持久化**: 使用 Docker volumes 挂载 MySQL、Redis、Milvus 数据
+
+#### 手动启动
+
+```bash
+# 启动全部服务（后台运行）
 docker-compose up -d
 
-# 启动特定服务
-docker-compose up -d fastapi redis
+# 查看服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+docker-compose logs -f fastapi
+docker-compose logs -f celery
+
+# 停止服务
+docker-compose stop
+
+# 停止并删除容器
+docker-compose down
+
+# 停止并删除容器和数据卷
+docker-compose down -v
 ```
 
 ### 生产环境部署
 
 1. **安装依赖**: 参考快速开始
 2. **配置环境变量**: 创建 `.env` 文件
-3. **启动服务**: 使用 `start.bat` 或 `start.sh`
+3. **启动服务**: 使用 `docker-start.bat start` 或 `./docker-start.sh start`
 4. **配置反向代理**: 使用 Nginx 或 Caddy
+5. **配置 SSL**: 配置 HTTPS 证书
+
+### 部署架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Nginx / Caddy                        │
+│              (反向代理 + SSL + 负载均衡)                  │
+└──────────────────────┬──────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────┐
+│                 Docker Compose                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐    │
+│  │  FastAPI │ │   MySQL  │ │  Redis   │ │  Milvus  │    │
+│  │  :8000   │ │   :3306  │ │   :6379  │ │ :19530   │    │
+│  └────┬─────┘ └──────────┘ └────┬─────┘ └──────────┘    │
+│       │                         │                       │
+│       │                         │                       │
+│  ┌────▼─────┐           ┌───────▼───────┐              │
+│  │  Celery  │           │ Celery Beat   │              │
+│  │  Worker  │           │ (定时任务)    │              │
+│  └──────────┘           └───────────────┘              │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## 开发指南
 
