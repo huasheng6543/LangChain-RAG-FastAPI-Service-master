@@ -1,4 +1,4 @@
-# 🚀 LangChain-RAG-FastAPI-Service (v2.0.0)
+# 🚀 LangChain-RAG-FastAPI-Service (v2.1.0)
 
 ## 📋 目录
 
@@ -10,6 +10,8 @@
 - [项目结构](#项目结构)
 - [API 文档](#api-文档)
 - [配置说明](#配置说明)
+- [知识库管理](#知识库管理)
+- [RAG检索性能测试](#rag检索性能测试)
 - [部署指南](#部署指南)
 - [开发指南](#开发指南)
 - [故障排除](#故障排除)
@@ -19,16 +21,17 @@
 
 这是一个基于 **FastAPI + LangChain** 构建的企业级 **RAG（检索增强生成）** 智能对话系统，支持本地大模型推理和多种向量数据库。系统采用微服务架构，具备会话持久化、限流熔断、JWT认证和模块化设计等特性，实现全链路离线闭环。
 
+知识库文档由管理员在后端统一管理，用户前端仅提供问答功能。
+
 ## 核心特性
 
 - **智能问答** 💬：基于 RAG 技术，结合文档检索和大语言模型，提供精准的问答体验
-- **文档上传** 📄：支持上传 PDF、TXT、MD、DOCX、PPTX 格式文档到知识库
 - **会话持久化** 💾：使用 MySQL 存储会话历史，支持长期保存和回溯
 - **多语言支持** 🌐：前端集成 i18n，支持中英文界面切换
 - **微服务架构** 🏗️：完整的用户认证、限流熔断、全局日志
 - **三种运行模式** 🎮：向量模式、LLM模式、完整模式，按需启动
-- **高性能** ⚡：基于 FastAPI、vLLM、ChromaDB/Milvus
-- **本地推理** 🖥️：支持 vLLM 部署本地开源大模型，摆脱在线 API 依赖
+- **高性能** ⚡：基于 FastAPI、ChromaDB/Milvus
+- **本地推理** 🖥️：支持 Ollama 部署本地开源大模型，摆脱在线 API 依赖
 - **两阶段检索** 🔍：向量粗筛 + Cross-Encoder 重排序，提升检索准确率
 
 ## 三种运行模式
@@ -37,7 +40,7 @@
 |------|------|----------|----------|
 | **模式1** | 向量模式 | FastAPI + ChromaDB + MySQL | 仅需文档检索，不需要LLM推理 |
 | **模式2** | LLM模式 | FastAPI + MySQL | 需要AI对话，不需要文档上传 |
-| **模式3** | 完整模式 | FastAPI + vLLM + Milvus + Redis + Celery + MySQL | 完整功能，包含文档上传、向量化、RAG检索、LLM推理 |
+| **模式3** | 完整模式 | FastAPI + ChromaDB + Redis + Celery + MySQL + Ollama | 完整功能，包含文档上传、向量化、RAG检索、LLM推理 |
 
 ## 技术架构
 
@@ -87,9 +90,7 @@ flowchart TD
     end
 
     subgraph "AI模型服务"
-        M -->|LLM调用| S["vLLM (Qwen3-7B)"]
-        M -->|LLM调用| T["DashScope API"]
-        M -->|LLM调用| U["Ollama Local"]
+        M -->|LLM调用| U["Ollama Local (qwen3:4b)"]
         K -->|嵌入模型| V["nomic-embed-text
         (Ollama)"]
         N -->|重排序| W["Qwen3-Reranker-0.6B"]
@@ -108,8 +109,7 @@ flowchart TD
 - Python 3.11+
 - MySQL 8.0+
 - Redis (可选，用于限流熔断)
-- Milvus (可选，模式3)
-- Ollama (可选，本地嵌入模型)
+- Ollama (本地模型运行)
 
 #### 前端环境
 - Node.js 16+
@@ -128,8 +128,7 @@ cd LangChain-RAG-FastAPI-Service-master
 ```bash
 cd backend
 
-# 创建虚拟环境 (Windows)
-python -m venv venv
+# 使用虚拟环境 (Windows)
 venv\Scripts\activate
 
 # 安装依赖
@@ -149,8 +148,8 @@ npm install
 在 `backend` 目录下创建 `.env` 文件：
 
 ```env
-# DashScope API Key (模式2/3使用)
-DASHSCOPE_API_KEY=your_dashscope_api_key
+# 运行模式: 1=向量模式, 2=LLM模式, 3=完整模式
+RUN_MODE=2
 
 # 数据库配置
 DB_HOST=localhost
@@ -169,16 +168,13 @@ SECRET_KEY=your_secret_key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
-# vLLM配置 (模式2/3)
-VLLM_MODEL_PATH=models/Qwen3-7B-Instruct-AWQ
-VLLM_HOST=0.0.0.0
-VLLM_PORT=8003
+# Ollama配置
+DEEPSEEK_BASE_URL=http://localhost:11434
+CHAT_MODEL_TYPE=ollama
+OLLAMA_CHAT_MODEL=qwen3:4b
 
 # Reranker模型配置
 RERANKER_MODEL_PATH=models/Qwen3-Reranker-0.6B
-
-# Ollama配置
-DEEPSEEK_BASE_URL=http://localhost:11434
 
 # LangSmith配置 (可选)
 LANGCHAIN_TRACING_V2=true
@@ -205,20 +201,10 @@ bash start.sh 3
 #### 手动启动
 
 ```bash
-# 模式1：向量模式
+# 启动后端服务
 cd backend
 venv\Scripts\activate
-python -m uvicorn main:app --host 0.0.0.0 --port 8002
-
-# 模式2：LLM模式
-cd backend
-venv\Scripts\activate
-python -m uvicorn main:app --host 0.0.0.0 --port 8002
-
-# 模式3：完整模式 (需要先启动Milvus和Redis)
-cd backend
-venv\Scripts\activate
-python -m uvicorn main:app --host 0.0.0.0 --port 8002
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 #### 启动前端服务
@@ -226,6 +212,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8002
 cd front
 npm run dev
 ```
+
 前端将在 `http://localhost:3000` 运行。
 
 #### 启动依赖服务
@@ -240,8 +227,9 @@ net start redis
 # Ollama (本地模型)
 ollama serve
 
-# Milvus (模式3，使用Docker)
-docker-compose up -d milvus
+# 下载Ollama模型
+ollama pull qwen3:4b
+ollama pull nomic-embed-text
 ```
 
 ### 下载模型（模式3）
@@ -262,14 +250,12 @@ python download_models.py
 | **FastAPI** ⚡ | 高性能异步 Web 框架 |
 | **LangChain** 🦜 | 大语言模型应用开发框架 |
 | **SQLAlchemy** 🗄️ | ORM 数据库操作 |
-| **ChromaDB** 📚 | 轻量级向量数据库（模式1） |
-| **Milvus** 🚀 | 分布式向量数据库（模式3） |
-| **vLLM** ⚡ | 高性能 LLM 推理引擎 |
+| **ChromaDB** 📚 | 轻量级向量数据库 |
+| **Milvus** 🚀 | 分布式向量数据库（可选） |
 | **MySQL** 🗄️ | 关系型数据库 |
 | **Redis** ⚡ | 缓存和限流 |
 | **Celery** 🧵 | 异步任务处理 |
 | **JWT** 🔑 | 用户认证 |
-| **DashScope API** 🔑 | 阿里云大模型服务 |
 | **Ollama** 🐑 | 本地模型运行 |
 
 ### 前端技术
@@ -288,30 +274,42 @@ python download_models.py
 ├── backend/                  # FastAPI 后端服务
 │   ├── app/                  # 应用代码
 │   │   ├── agent/            # 智能代理模块
+│   │   ├── cache/            # 缓存模块
 │   │   ├── config/           # 配置文件目录
 │   │   ├── core/             # 核心组件 (限流、熔断、权限)
 │   │   ├── db/               # 数据库配置
 │   │   ├── llm/              # LLM 适配器
 │   │   ├── models/           # 数据模型定义
+│   │   ├── prompt/           # 提示词模板
 │   │   ├── rag/              # RAG 核心功能
 │   │   ├── router/           # API 路由定义
+│   │   ├── schemas/          # 数据结构定义
+│   │   ├── services/         # 服务层
 │   │   ├── tasks/            # Celery 异步任务
 │   │   └── utils/            # 工具函数
 │   ├── models/               # 本地模型目录
+│   ├── .env                  # 环境变量配置
+│   ├── .env.example          # 环境变量示例
 │   ├── main.py               # 应用入口文件
 │   ├── start_server.py       # 启动脚本
 │   ├── requirements.txt      # 后端依赖列表
-│   └── download_models.py    # 模型下载脚本
+│   ├── download_models.py    # 模型下载脚本
+│   ├── upload_knowledge.py   # 知识库文档上传脚本
+│   └── verify_env.py         # 环境验证脚本
 ├── front/                    # Vue 前端项目
 │   ├── src/
 │   │   ├── views/            # 页面组件
 │   │   ├── components/       # 可复用组件
 │   │   ├── store/            # Pinia 状态管理
 │   │   ├── router/           # 路由配置
+│   │   ├── config/           # API 配置
+│   │   ├── i18n/             # 国际化配置
 │   │   └── utils/            # 工具函数
 │   ├── public/               # 静态资源
 │   ├── package.json          # 前端依赖配置
 │   └── vite.config.js        # Vite 配置
+├── docs/                     # 文档目录
+├── images/                   # 项目截图
 ├── docker-compose.yml        # Docker 部署配置
 ├── start.bat                 # Windows 一键启动脚本
 ├── start.sh                  # Linux/Mac 一键启动脚本
@@ -323,22 +321,24 @@ python download_models.py
 ## API 文档
 
 ### FastAPI 后端 API
-- **交互式文档**: http://localhost:8002/docs
-- **Redoc 文档**: http://localhost:8002/redoc
+- **交互式文档**: http://localhost:8000/docs
+- **Redoc 文档**: http://localhost:8000/redoc
 
 ### 核心接口
 
 | 接口 | 方法 | 描述 |
 |------|------|------|
-| `/api/auth/register` | POST | 用户注册 |
-| `/api/auth/login` | POST | 用户登录 |
-| `/api/auth/me` | GET | 获取当前用户 |
-| `/api/chat/stream` | POST | 流式聊天 |
-| `/api/chat/query` | POST | 非流式聊天 |
-| `/api/vector/add/single` | POST | 上传单个文件 |
-| `/api/vector/add/multiple` | POST | 上传多个文件 |
-| `/api/vector/search` | POST | 向量检索 |
-| `/api/vector/clean` | DELETE | 清空用户所有文档 |
+| `/user/login/` | POST | 用户登录 |
+| `/user/register/` | POST | 用户注册 |
+| `/user/detail/` | GET | 获取用户信息 |
+| `/api/agent/query` | POST | AI对话查询 |
+| `/api/agent/query/stream` | POST | 流式AI对话 |
+| `/api/rag/query` | POST | RAG问答查询 |
+| `/api/vector/add/single` | POST | 上传单个文件（管理员） |
+| `/api/vector/add/multiple` | POST | 上传多个文件（管理员） |
+| `/api/vector/clean` | DELETE | 清空向量数据库 |
+| `/api/session/` | GET/DELETE | 会话管理 |
+| `/health/live` | GET | 健康检查 |
 
 ## 配置说明
 
@@ -370,6 +370,72 @@ chunk_size: 200
 chunk_overlap: 20
 ```
 
+### Ollama模型配置
+
+在 `backend/.env` 文件中配置：
+
+```env
+CHAT_MODEL_TYPE=ollama
+OLLAMA_CHAT_MODEL=qwen3:4b
+DEEPSEEK_BASE_URL=http://localhost:11434
+```
+
+## 知识库管理
+
+### 上传文档
+
+知识库文档由管理员通过后端脚本上传：
+
+```bash
+cd backend
+venv\Scripts\activate
+
+# 上传单个文件
+python upload_knowledge.py ./docs/pet_guide.pdf
+
+# 上传整个目录
+python upload_knowledge.py ./docs/
+```
+
+**支持的文件格式：**
+- `.txt` - 纯文本文件
+- `.pdf` - PDF文档
+- `.md` - Markdown文件
+- `.docx` - Word文档
+- `.pptx` - PowerPoint文档
+
+### 管理文档
+
+```bash
+# 通过API清空向量数据库
+curl -X DELETE "http://localhost:8000/api/vector/clean" \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+## RAG检索性能测试
+
+### 测试结果
+
+| 测试项目 | 结果 |
+|----------|------|
+| **单向量检索召回率** | 100% (20/20) |
+| **Cross-Encoder重排序后召回率** | 100% (20/20) |
+| **复杂文档误召回率降低** | ~75% |
+| **重排序耗时** | 14-35秒/次 (CPU) |
+
+### 测试脚本
+
+```bash
+cd backend
+venv\Scripts\activate
+
+# 运行完整测试
+python test_rag_performance.py
+
+# 运行检索性能测试
+python test_retrieval_performance.py
+```
+
 ## 部署指南
 
 ### 使用 Docker
@@ -379,7 +445,7 @@ chunk_overlap: 20
 docker-compose up -d
 
 # 启动特定服务
-docker-compose up -d fastapi redis milvus
+docker-compose up -d fastapi redis
 ```
 
 ### 生产环境部署
@@ -426,12 +492,17 @@ docker-compose up -d fastapi redis milvus
 3. **模型加载失败**
    - 检查模型文件是否下载完成
    - 检查模型路径配置是否正确
-   - 检查 vLLM 是否正确安装
+   - 检查 Ollama 是否正确安装和启动
 
 4. **401 认证错误**
    - 检查 JWT Token 是否过期
    - 检查登录状态是否正常
    - 重新登录获取新 Token
+
+5. **向量检索失败**
+   - 检查向量数据库是否正常运行
+   - 检查文档是否已正确上传
+   - 检查嵌入模型配置
 
 ## 联系方式
 

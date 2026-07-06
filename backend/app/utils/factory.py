@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 from langchain_community.chat_models.tongyi import ChatTongyi
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_ollama import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings, ChatOllama
 
 from app.utils.config import rag_config
+from app.core.logger_handler import logger
 
 # 加载环境变量
 load_dotenv()
@@ -27,12 +28,25 @@ class ChatModelFactory(BaseModelFactory):
     """聊天模型工厂"""
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
         """生成模型"""
-        return ChatTongyi(
-            model=rag_config['chat_model_name'],
-            api_key=os.getenv("ALIYUN_ACCESS_KEY_SECRET"),
-            streaming=True,
-            top_p=0.7,
-        )
+        chat_model_type = os.getenv("CHAT_MODEL_TYPE", "aliyun").lower()
+        
+        if chat_model_type == "ollama":
+            ollama_model = os.getenv("OLLAMA_CHAT_MODEL", "qwen3:7b")
+            logger.info(f"【ChatModel】使用Ollama模型: {ollama_model}")
+            return ChatOllama(
+                model=ollama_model,
+                base_url="http://localhost:11434",
+                streaming=True,
+                temperature=0.7,
+                top_p=0.7,
+            )
+        else:
+            return ChatTongyi(
+                model=rag_config['chat_model_name'],
+                api_key=os.getenv("ALIYUN_ACCESS_KEY_SECRET"),
+                streaming=True,
+                top_p=0.7,
+            )
 
 
 class EmbedModelFactory(BaseModelFactory):

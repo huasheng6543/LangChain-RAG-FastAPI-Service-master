@@ -26,25 +26,6 @@
       </div>
       
       <div class="input-container">
-        <div class="input-tools">
-          <van-button 
-            icon="upload" 
-            size="small" 
-            type="default"
-            class="upload-btn"
-            @click="triggerFileInput"
-          >
-            上传
-          </van-button>
-          <input 
-            ref="fileInput"
-            type="file"
-            multiple
-            accept=".txt,.pdf,.md,.docx,.pptx"
-            class="file-input"
-            @change="handleFileChange"
-          />
-        </div>
         <van-field
           v-model="userInput"
           rows="1"
@@ -107,7 +88,6 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const sessionStore = useSessionStore();
-const fileInput = ref(null);
 
 // 配置marked使用marked-highlight插件
 marked.use(markedHighlight({
@@ -142,8 +122,10 @@ const sendMessage = async () => {
   if (!userInput.value.trim() || isLoading.value) return;
   
   // 检查是否登录
-  if (!userStore.getLoginStatus) {
+  const token = localStorage.getItem('jwt_token') || userStore.token;
+  if (!userStore.getLoginStatus || !token) {
     showToast('请先登录');
+    router.push('/login');
     return;
   }
   
@@ -198,6 +180,12 @@ const fetchAIResponse = async (userMessage) => {
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        showToast('登录已过期，请重新登录');
+        localStorage.removeItem('jwt_token');
+        userStore.logout();
+        router.push('/login');
+      }
       throw new Error(error.detail || `HTTP error! status: ${response.status}`);
     }
     
@@ -288,70 +276,6 @@ const goToSessions = () => {
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-};
-
-// 文件上传相关函数
-const triggerFileInput = () => {
-  fileInput.value?.click();
-};
-
-const handleFileChange = async (event) => {
-  const files = Array.from(event.target.files);
-  if (files.length === 0) return;
-  
-  if (!userStore.getLoginStatus) {
-    showToast('请先登录');
-    return;
-  }
-  
-  const token = localStorage.getItem('jwt_token') || userStore.token;
-  const loadingToast = showToast({
-    message: '上传中...',
-    forbidClick: true,
-    loadingType: 'spinner'
-  });
-  
-  try {
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('files', file);
-    });
-    
-    const response = await fetch('/api/vector/add/multiple', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.code === 200) {
-      showToast({
-        type: 'success',
-        message: result.message || `成功上传 ${files.length} 个文件`
-      });
-      messages.value.push({ 
-        role: 'assistant', 
-        content: `已成功上传 ${files.length} 个文件到知识库，您可以基于这些文档提问了。` 
-      });
-    } else {
-      showToast({
-        type: 'fail',
-        message: result.message || '上传失败'
-      });
-    }
-  } catch (error) {
-    console.error('上传失败:', error);
-    showToast({
-      type: 'fail',
-      message: '上传失败，请稍后重试'
-    });
-  } finally {
-    loadingToast.clear();
-    event.target.value = '';
   }
 };
 
