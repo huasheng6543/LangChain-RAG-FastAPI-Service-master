@@ -33,6 +33,7 @@
 - **高性能** ⚡：基于 FastAPI、ChromaDB/Milvus
 - **本地推理** 🖥️：支持 Ollama 部署本地开源大模型，摆脱在线 API 依赖
 - **两阶段检索** 🔍：向量粗筛 + Cross-Encoder 重排序，提升检索准确率
+- **实时监控** 📊：集成 Prometheus + Grafana 监控系统，实时监控系统状态和性能指标
 
 ## 三种运行模式
 
@@ -257,6 +258,8 @@ python download_models.py
 | **Celery** 🧵 | 异步任务处理 |
 | **JWT** 🔑 | 用户认证 |
 | **Ollama** 🐑 | 本地模型运行 |
+| **Prometheus** 📊 | 系统监控 |
+| **Grafana** 📈 | 可视化仪表盘 |
 
 ### 前端技术
 | 技术 | 用途 |
@@ -295,7 +298,11 @@ python download_models.py
 │   ├── requirements.txt      # 后端依赖列表
 │   ├── download_models.py    # 模型下载脚本
 │   ├── upload_knowledge.py   # 知识库文档上传脚本
-│   └── verify_env.py         # 环境验证脚本
+│   ├── verify_env.py         # 环境验证脚本
+│   ├── prometheus.yml        # Prometheus配置文件
+│   ├── alert_rules.yml       # 告警规则配置
+│   ├── download_awq_model.py # AWQ模型下载与量化脚本
+│   └── grafana/              # Grafana配置目录
 ├── front/                    # Vue 前端项目
 │   ├── src/
 │   │   ├── views/            # 页面组件
@@ -339,6 +346,70 @@ python download_models.py
 | `/api/vector/clean` | DELETE | 清空向量数据库 |
 | `/api/session/` | GET/DELETE | 会话管理 |
 | `/health/live` | GET | 健康检查 |
+| `/monitoring/metrics` | GET | Prometheus指标暴露 |
+| `/monitoring/health` | GET | 系统健康检查 |
+| `/monitoring/system` | GET | 系统资源信息 |
+
+## 监控系统
+
+### 监控指标
+
+系统集成了 Prometheus 监控，提供以下核心指标：
+
+| 指标名称 | 类型 | 描述 |
+|----------|------|------|
+| `fastapi_requests_total` | Counter | 总请求数 |
+| `fastapi_request_latency_seconds` | Histogram | 请求延迟 |
+| `rag_chat_request_latency_seconds` | Histogram | 聊天请求延迟 |
+| `system_memory_usage_percent` | Gauge | 内存使用率 |
+| `system_cpu_usage_percent` | Gauge | CPU使用率 |
+| `system_disk_usage_percent` | Gauge | 磁盘使用率 |
+| `rag_retrieval_count` | Counter | RAG检索次数 |
+| `llm_call_count` | Counter | LLM调用次数 |
+
+### 访问监控
+
+```bash
+# Prometheus指标
+http://localhost:8000/monitoring/metrics
+
+# 系统健康检查
+http://localhost:8000/monitoring/health
+
+# 系统资源信息
+http://localhost:8000/monitoring/system
+```
+
+### Grafana仪表盘
+
+项目提供了预配置的 Grafana 仪表盘，包含：
+
+- **系统概览**: CPU、内存、磁盘使用率
+- **请求监控**: 请求速率、延迟分布、错误率
+- **RAG监控**: 检索次数、LLM调用次数、重排序耗时
+- **错误监控**: 错误类型统计、熔断触发次数
+
+#### 启动监控服务
+
+```bash
+# 启动Prometheus和Grafana (Docker模式)
+docker-compose up -d prometheus grafana
+
+# 访问Grafana
+http://localhost:3000
+# 默认账号: admin/admin
+```
+
+### 告警规则
+
+系统配置了以下告警规则：
+
+| 告警名称 | 阈值 | 说明 |
+|----------|------|------|
+| HighMemoryUsage | 内存使用率 > 85% | 内存使用率过高 |
+| HighCPUUsage | CPU使用率 > 90% | CPU使用率过高 |
+| HighRequestLatency | 请求延迟 > 5秒 | 请求延迟过高 |
+| HighErrorRate | 错误率 > 5% | 请求错误率过高 |
 
 ## 配置说明
 
@@ -496,6 +567,8 @@ docker-start.bat clean          # Windows (需确认)
 | **milvus** | milvusdb/milvus:v2.4.5 | 19530 | 向量数据库 |
 | **celery** | 自定义构建 | - | 异步任务处理 |
 | **celery-beat** | 自定义构建 | - | 定时任务调度 |
+| **prometheus** | prom/prometheus:v2.52.0 | 9090 | 监控系统 |
+| **grafana** | grafana/grafana:10.2.0 | 3000 | 可视化仪表盘 |
 
 #### 日志持久化方案
 

@@ -40,6 +40,34 @@ class ChatModelFactory(BaseModelFactory):
                 temperature=0.7,
                 top_p=0.7,
             )
+        elif chat_model_type == "vllm":
+            try:
+                from langchain_vllm import ChatVLLM
+                
+                vllm_model_path = os.getenv("VLLM_MODEL_PATH", "./models/Qwen3-4B-Instruct-AWQ")
+                vllm_model_name = os.getenv("VLLM_MODEL_NAME", "Qwen/Qwen3-4B-Instruct-AWQ")
+                
+                model_path = vllm_model_path if os.path.exists(vllm_model_path) else vllm_model_name
+                
+                logger.info(f"【ChatModel】使用vLLM模型: {model_path}")
+                
+                return ChatVLLM(
+                    model=model_path,
+                    temperature=0.7,
+                    top_p=0.7,
+                    max_tokens=2048,
+                    streaming=True,
+                )
+            except ImportError:
+                logger.warning("【ChatModel】vLLM库未安装，回退到Ollama")
+                ollama_model = os.getenv("OLLAMA_CHAT_MODEL", "qwen3:7b")
+                return ChatOllama(
+                    model=ollama_model,
+                    base_url="http://localhost:11434",
+                    streaming=True,
+                    temperature=0.7,
+                    top_p=0.7,
+                )
         else:
             return ChatTongyi(
                 model=rag_config['chat_model_name'],

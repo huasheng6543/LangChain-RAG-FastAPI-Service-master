@@ -9,6 +9,7 @@ from app.db.redis_config import connect_redis, close_redis
 from app.router.chat import chat_router
 from app.router.health import health_router
 from app.router.user import user_router
+from app.router.monitoring import monitoring_router
 
 from app.services.database_session_manager import init_database_session_manager
 
@@ -18,6 +19,8 @@ from app.core.logger_handler import logger, RequestLogMiddleware
 from app.core.circuit_breaker import CircuitBreakerMiddleware
 
 from app.rag.reorder_service import check_and_download_reranker_model
+
+from app.monitoring.metrics import record_request, record_error
 
 # 加载环境变量
 load_dotenv()
@@ -32,15 +35,27 @@ app.add_middleware(CircuitBreakerMiddleware)
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(round(process_time, 4))
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        record_error(error_type=type(e).__name__, endpoint=str(request.url.path))
+        raise
+    finally:
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(round(process_time, 4))
+        record_request(
+            method=request.method,
+            endpoint=str(request.url.path),
+            status_code=response.status_code,
+            latency=process_time
+        )
     return response
 
 # 集成API路由
 app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(user_router)
+app.include_router(monitoring_router)
 
 
 

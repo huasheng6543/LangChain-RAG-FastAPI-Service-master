@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - "alert_rules.yml"
+
+scrape_configs:
+  - job_name: 'fastapi-app'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: '/monitoring/metrics'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:6379']
+
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['localhost:3306']

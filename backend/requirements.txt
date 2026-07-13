@@ -16,3 +16,5 @@ aiomysql~=0.2.0
 pymilvus~=2.4.5
 celery~=5.3.6
 pybreaker~=1.0.0
+prometheus-client~=0.20.0
+psutil~=6.0.0

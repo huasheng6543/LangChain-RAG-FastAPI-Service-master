@@ -186,12 +186,71 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rag-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./backend/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
+    networks:
+      - rag-network
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rag-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./backend/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./backend/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    networks:
+      - rag-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
 volumes:
   mysql_data:
     driver: local
   redis_data:
     driver: local
   milvus_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:
